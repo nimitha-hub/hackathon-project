@@ -341,6 +341,26 @@ def get_user_profile():
         return jsonify({'error': str(e)}), 500
 
 
+def parse_float(value):
+    """Convert value to float, returning None for empty strings or None values."""
+    if value is None or value == '':
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def parse_int(value):
+    """Convert value to int, returning None for empty strings or None values."""
+    if value is None or value == '':
+        return None
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return None
+
+
 @app.route('/api/user/profile', methods=['PUT'])
 @jwt_required()
 def update_user_profile():
@@ -355,51 +375,51 @@ def update_user_profile():
         data = request.get_json()
         print(f"Received profile update data: {data}")  # Debug logging
         
-        # Update all provided fields
+        # Update all provided fields with proper type conversion
         if 'nickname' in data:
-            user.nickname = data['nickname']
+            user.nickname = data['nickname'] if data['nickname'] else None
         if 'age' in data:
-            user.age = data['age']
+            user.age = parse_int(data['age'])
         if 'height_cm' in data:
-            user.height_cm = data['height_cm']
+            user.height_cm = parse_float(data['height_cm'])
         if 'weight_kg' in data:
-            user.weight_kg = data['weight_kg']
+            user.weight_kg = parse_float(data['weight_kg'])
         if 'blood_type' in data:
-            user.blood_type = data['blood_type']
+            user.blood_type = data['blood_type'] if data['blood_type'] else None
         if 'blood_sugar_fasting' in data:
-            user.blood_sugar_fasting = data['blood_sugar_fasting']
+            user.blood_sugar_fasting = parse_float(data['blood_sugar_fasting'])
         if 'blood_pressure_sys' in data:
-            user.blood_pressure_sys = data['blood_pressure_sys']
+            user.blood_pressure_sys = parse_int(data['blood_pressure_sys'])
         if 'blood_pressure_dia' in data:
-            user.blood_pressure_dia = data['blood_pressure_dia']
+            user.blood_pressure_dia = parse_int(data['blood_pressure_dia'])
         if 'job_title' in data:
-            user.job_title = data['job_title']
+            user.job_title = data['job_title'] if data['job_title'] else None
         if 'job_stress_level' in data:
-            user.job_stress_level = data['job_stress_level']
+            user.job_stress_level = data['job_stress_level'] if data['job_stress_level'] else None
         if 'sleep_goal_hours' in data:
-            user.sleep_goal_hours = data['sleep_goal_hours']
+            user.sleep_goal_hours = parse_float(data['sleep_goal_hours'])
         if 'exercise_goal_minutes' in data:
-            user.exercise_goal_minutes = data['exercise_goal_minutes']
+            user.exercise_goal_minutes = parse_int(data['exercise_goal_minutes'])
         if 'hobbies' in data:
-            user.hobbies = data['hobbies']
+            user.hobbies = data['hobbies'] if data['hobbies'] else None
         if 'likes' in data:
-            user.likes = data['likes']
+            user.likes = data['likes'] if data['likes'] else None
         if 'dislikes' in data:
-            user.dislikes = data['dislikes']
+            user.dislikes = data['dislikes'] if data['dislikes'] else None
         if 'has_menstrual_cycle' in data:
             user.has_menstrual_cycle = data['has_menstrual_cycle']
         if 'menstrual_cycle_day' in data:
-            user.menstrual_cycle_day = data['menstrual_cycle_day']
+            user.menstrual_cycle_day = parse_int(data['menstrual_cycle_day'])
         if 'dietary_restrictions' in data:
-            user.dietary_restrictions = data['dietary_restrictions']
+            user.dietary_restrictions = data['dietary_restrictions'] if data['dietary_restrictions'] else None
         if 'allergies' in data:
-            user.allergies = data['allergies']
+            user.allergies = data['allergies'] if data['allergies'] else None
         if 'chronic_conditions' in data:
-            user.chronic_conditions = data['chronic_conditions']
+            user.chronic_conditions = data['chronic_conditions'] if data['chronic_conditions'] else None
         if 'meditation_preference' in data:
-            user.meditation_preference = data['meditation_preference']
+            user.meditation_preference = data['meditation_preference'] if data['meditation_preference'] else None
         if 'video_reminder_interval' in data:
-            user.video_reminder_interval = data['video_reminder_interval']
+            user.video_reminder_interval = parse_int(data['video_reminder_interval'])
         
         user.updated_at = datetime.utcnow()
         db.session.commit()

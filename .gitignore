@@ -8,3 +8,8 @@ __pycache__/
 
 # VSCode
 .vscode/
+
+# Database files
+*.db
+instance/
+backend/instance/
