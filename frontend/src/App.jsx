@@ -44,6 +44,11 @@ function LoginPage({ onLogin }) {
     }
   };
 
+  const handleClearStorage = () => {
+    localStorage.clear();
+    window.location.reload();
+  };
+
   return (
     <div className="auth-container">
       <div className="auth-card">
@@ -94,6 +99,15 @@ function LoginPage({ onLogin }) {
             {isRegister ? 'Login' : 'Register'}
           </button>
         </p>
+        
+        <button 
+          type="button" 
+          className="btn-reset"
+          onClick={handleClearStorage}
+          style={{ marginTop: '10px', fontSize: '12px' }}
+        >
+          Clear Cache & Reset
+        </button>
       </div>
     </div>
   );
@@ -110,16 +124,14 @@ function ProfileSetupPage({ token, onComplete }) {
     blood_pressure_sys: '',
     blood_pressure_dia: '',
     blood_sugar_fasting: '',
-    sleep_goal_hours: '',
-    work_start_time: '09:00',
-    work_end_time: '17:00',
-    medications: []
+    sleep_goal_hours: '8'
   });
+  const [medications, setMedications] = useState([]);
   const [newMed, setNewMed] = useState({
     name: '',
-    dose: '',
+    dosage: '',
     frequency: '',
-    stock: ''
+    stock_quantity: ''
   });
   const [saving, setSaving] = useState(false);
 
@@ -129,20 +141,14 @@ function ProfileSetupPage({ token, onComplete }) {
   };
 
   const handleAddMedication = () => {
-    if (newMed.name && newMed.dose && newMed.frequency && newMed.stock) {
-      setProfile(prev => ({
-        ...prev,
-        medications: [...prev.medications, newMed]
-      }));
-      setNewMed({ name: '', dose: '', frequency: '', stock: '' });
+    if (newMed.name && newMed.dosage && newMed.frequency && newMed.stock_quantity) {
+      setMedications(prev => [...prev, newMed]);
+      setNewMed({ name: '', dosage: '', frequency: '', stock_quantity: '' });
     }
   };
 
   const handleRemoveMedication = (index) => {
-    setProfile(prev => ({
-      ...prev,
-      medications: prev.medications.filter((_, i) => i !== index)
-    }));
+    setMedications(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmit = async (e) => {
@@ -150,7 +156,9 @@ function ProfileSetupPage({ token, onComplete }) {
     setSaving(true);
     
     try {
-      const response = await fetch('http://localhost:5000/api/user/profile', {
+      console.log('Submitting profile:', profile);
+      
+      const profileResponse = await fetch('http://localhost:5000/api/user/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -159,12 +167,35 @@ function ProfileSetupPage({ token, onComplete }) {
         body: JSON.stringify(profile)
       });
       
-      if (response.ok) {
+      console.log('Profile response status:', profileResponse.status);
+      const profileData = await profileResponse.json();
+      console.log('Profile response data:', profileData);
+      
+      if (profileResponse.ok) {
+        console.log('Profile saved successfully');
+        
+        // Save medications if any
+        if (medications.length > 0) {
+          for (const med of medications) {
+            await fetch('http://localhost:5000/api/medications', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify(med)
+            });
+          }
+        }
+        
         localStorage.setItem('profileSetup', 'true');
         onComplete();
+      } else {
+        alert('Failed to save profile: ' + (profileData.error || 'Unknown error'));
       }
     } catch (err) {
       console.error('Profile update failed:', err);
+      alert('Error saving profile: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -246,9 +277,9 @@ function ProfileSetupPage({ token, onComplete }) {
             />
           </div>
 
-          {/* Sleep & Work */}
+          {/* Sleep */}
           <div className="setup-section">
-            <h3>Sleep & Work Schedule</h3>
+            <h3>Sleep Goal</h3>
             <input
               type="number"
               name="sleep_goal_hours"
@@ -256,20 +287,6 @@ function ProfileSetupPage({ token, onComplete }) {
               value={profile.sleep_goal_hours}
               onChange={handleProfileChange}
             />
-            <div className="setup-row">
-              <input
-                type="time"
-                name="work_start_time"
-                value={profile.work_start_time}
-                onChange={handleProfileChange}
-              />
-              <input
-                type="time"
-                name="work_end_time"
-                value={profile.work_end_time}
-                onChange={handleProfileChange}
-              />
-            </div>
           </div>
 
           {/* Medications */}
@@ -285,8 +302,8 @@ function ProfileSetupPage({ token, onComplete }) {
               <input
                 type="text"
                 placeholder="Dose (e.g., 500mg)"
-                value={newMed.dose}
-                onChange={(e) => setNewMed({...newMed, dose: e.target.value})}
+                value={newMed.dosage}
+                onChange={(e) => setNewMed({...newMed, dosage: e.target.value})}
               />
               <input
                 type="text"
@@ -297,19 +314,19 @@ function ProfileSetupPage({ token, onComplete }) {
               <input
                 type="number"
                 placeholder="Stock Qty"
-                value={newMed.stock}
-                onChange={(e) => setNewMed({...newMed, stock: e.target.value})}
+                value={newMed.stock_quantity}
+                onChange={(e) => setNewMed({...newMed, stock_quantity: e.target.value})}
               />
               <button type="button" className="btn-add-med" onClick={handleAddMedication}>
                 + Add
               </button>
             </div>
 
-            {profile.medications.length > 0 && (
+            {medications.length > 0 && (
               <div className="med-list">
-                {profile.medications.map((med, idx) => (
+                {medications.map((med, idx) => (
                   <div key={idx} className="med-item">
-                    <span>{med.name} - {med.dose}, {med.frequency}</span>
+                    <span>{med.name} - {med.dosage}, {med.frequency}</span>
                     <button 
                       type="button" 
                       onClick={() => handleRemoveMedication(idx)}
@@ -787,20 +804,35 @@ function MainDashboard({ token, onLogout }) {
 // ==================== MAIN APP ====================
 
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('token'));
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [profileSetup, setProfileSetup] = useState(localStorage.getItem('profileSetup') === 'true');
+  // Debug logging for localStorage state
+  const storedToken = localStorage.getItem('token');
+  const storedProfileSetup = localStorage.getItem('profileSetup');
+  
+  console.log('App mount:', {
+    token: storedToken,
+    profileSetup: storedProfileSetup,
+    isLoggedIn: !!storedToken
+  });
+  
+  const [isLoggedIn, setIsLoggedIn] = useState(!!storedToken);
+  const [token, setToken] = useState(storedToken);
+  const [profileSetup, setProfileSetup] = useState(storedProfileSetup === 'true');
 
   const handleLogin = () => {
     const newToken = localStorage.getItem('token');
     setToken(newToken);
     setIsLoggedIn(true);
-    setProfileSetup(localStorage.getItem('profileSetup') === 'true');
+    // Reset profileSetup on login to force profile setup for new users
+    const setup = localStorage.getItem('profileSetup') === 'true';
+    setProfileSetup(setup);
+    console.log('Login:', { token: newToken, profileSetup: setup });
   };
 
   const handleProfileComplete = () => {
+    // Only set profileSetup after successful profile update
     localStorage.setItem('profileSetup', 'true');
     setProfileSetup(true);
+    console.log('Profile setup complete, redirecting to dashboard');
   };
 
   const handleLogout = () => {
@@ -810,16 +842,20 @@ export default function App() {
     setIsLoggedIn(false);
     setToken(null);
     setProfileSetup(false);
+    console.log('Logout: cleared localStorage');
   };
 
   if (!isLoggedIn) {
+    console.log('Rendering LoginPage');
     return <LoginPage onLogin={handleLogin} />;
   }
 
   if (!profileSetup) {
+    console.log('Rendering ProfileSetupPage');
     return <ProfileSetupPage token={token} onComplete={handleProfileComplete} />;
   }
 
+  console.log('Rendering MainDashboard');
   return <MainDashboard token={token} onLogout={handleLogout} />;
 }
 

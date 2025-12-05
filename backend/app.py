@@ -6,7 +6,25 @@ from functools import wraps
 from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
+
+# Try to import AI libraries
+GENAI_AVAILABLE = False
+OPENAI_AVAILABLE = False
+
+try:
+    import google.generativeai as genai
+    GENAI_AVAILABLE = True
+except Exception as e:
+    print(f"Warning: Google AI not available: {e}")
+    genai = None
+
+try:
+    import openai
+    OPENAI_AVAILABLE = True
+except Exception as e:
+    print(f"Info: OpenAI not available: {e}")
+    openai = None
+
 from apscheduler.schedulers.background import BackgroundScheduler
 import smtplib
 from email.mime.text import MIMEText
@@ -24,10 +42,18 @@ db = SQLAlchemy(app)
 jwt = JWTManager(app)
 CORS(app)
 
-# Initialize Google Generative AI
+# Initialize AI services
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')
-if GOOGLE_API_KEY:
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+
+if GOOGLE_API_KEY and GENAI_AVAILABLE:
     genai.configure(api_key=GOOGLE_API_KEY)
+    print("✓ Google AI configured")
+elif OPENAI_API_KEY and OPENAI_AVAILABLE:
+    openai.api_key = OPENAI_API_KEY
+    print("✓ OpenAI configured")
+else:
+    print("⚠ AI service running in fallback mode")
 
 # Email Configuration
 SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
@@ -48,6 +74,7 @@ class User(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(120), nullable=False)
+    nickname = db.Column(db.String(100))  # Added for profile
     
     # Personal Information
     age = db.Column(db.Integer)
@@ -283,30 +310,31 @@ def get_user_profile():
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
+        # Get medications
+        medications = Medication.query.filter_by(user_id=user_id).all()
+        meds_list = [{
+            'id': med.id,
+            'name': med.name,
+            'dosage': med.dosage,
+            'frequency': med.frequency,
+            'stock_quantity': med.stock_quantity
+        } for med in medications]
+        
         return jsonify({
             'id': user.id,
             'email': user.email,
             'name': user.name,
+            'nickname': user.nickname,
             'age': user.age,
             'height_cm': user.height_cm,
             'weight_kg': user.weight_kg,
             'blood_type': user.blood_type,
             'blood_sugar_fasting': user.blood_sugar_fasting,
-            'blood_pressure': f"{user.blood_pressure_sys}/{user.blood_pressure_dia}",
-            'job_title': user.job_title,
-            'job_stress_level': user.job_stress_level,
+            'blood_pressure_sys': user.blood_pressure_sys,
+            'blood_pressure_dia': user.blood_pressure_dia,
             'sleep_goal_hours': user.sleep_goal_hours,
-            'exercise_goal_minutes': user.exercise_goal_minutes,
-            'hobbies': user.hobbies,
-            'likes': user.likes,
-            'dislikes': user.dislikes,
-            'has_menstrual_cycle': user.has_menstrual_cycle,
-            'dietary_restrictions': user.dietary_restrictions,
-            'allergies': user.allergies,
-            'chronic_conditions': user.chronic_conditions,
-            'meditation_preference': user.meditation_preference,
-            'video_reminder_interval': user.video_reminder_interval,
-            'created_at': user.created_at.isoformat()
+            'exercise_goal_minutes': user.exercise_goal_minutes or 30,
+            'medications': meds_list
         }), 200
         
     except Exception as e:
@@ -325,8 +353,11 @@ def update_user_profile():
             return jsonify({'error': 'User not found'}), 404
         
         data = request.get_json()
+        print(f"Received profile update data: {data}")  # Debug logging
         
         # Update all provided fields
+        if 'nickname' in data:
+            user.nickname = data['nickname']
         if 'age' in data:
             user.age = data['age']
         if 'height_cm' in data:
@@ -373,10 +404,14 @@ def update_user_profile():
         user.updated_at = datetime.utcnow()
         db.session.commit()
         
+        print("Profile updated successfully!")  # Debug logging
         return jsonify({'message': 'Profile updated successfully'}), 200
         
     except Exception as e:
         db.session.rollback()
+        print(f"Error updating profile: {str(e)}")  # Debug logging
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -678,13 +713,48 @@ def get_chat_history():
 
 
 def generate_ai_response(user, message):
-    """Generate AI response using Google Generative AI"""
+    """Generate AI response using available AI service"""
     try:
-        if not GOOGLE_API_KEY:
-            return "AI service not configured. Please set GOOGLE_API_KEY environment variable."
+        # Try Google AI first
+        if GENAI_AVAILABLE and GOOGLE_API_KEY:
+            return generate_google_ai_response(user, message)
         
-        # Build user context from profile
-        user_context = f"""
+        # Fall back to OpenAI
+        if OPENAI_AVAILABLE and OPENAI_API_KEY:
+            return generate_openai_response(user, message)
+        
+        # Fallback response
+        return f"Hello! I'm your HealMate assistant. I'm currently in basic mode. I see you asked: '{message}'. To enable full AI features, please configure either Google AI or OpenAI API key."
+    
+    except Exception as e:
+        print(f"AI Error: {str(e)}")
+        return "I'm having trouble generating a response right now, but I'm here to support your health journey. Could you try rephrasing your question?"
+
+
+def generate_google_ai_response(user, message):
+    """Generate response using Google Generative AI"""
+    user_context = build_user_context(user)
+    model = genai.GenerativeModel('gemini-pro')
+    response = model.generate_content(f"{user_context}\n\nUser asks: {message}")
+    return response.text if response.text else "I'm here to help with your health. Please try asking me something specific."
+
+
+def generate_openai_response(user, message):
+    """Generate response using OpenAI"""
+    user_context = build_user_context(user)
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": user_context},
+            {"role": "user", "content": message}
+        ]
+    )
+    return response.choices[0].message.content
+
+
+def build_user_context(user):
+    """Build user context for AI"""
+    return f"""
 You are HealMate, a compassionate health assistant. You're helping {user.name}.
 
 User Profile:
@@ -705,15 +775,6 @@ Medications:
 
 Provide personalized health advice based on this profile. Be empathetic, encouraging, and practical.
 """
-        
-        model = genai.GenerativeModel('gemini-pro')
-        response = model.generate_content(f"{user_context}\n\nUser asks: {message}")
-        
-        return response.text if response.text else "I'm here to help with your health. Please try asking me something specific."
-    
-    except Exception as e:
-        print(f"AI Error: {str(e)}")
-        return f"I'm having trouble generating a response right now, but I'm here to support your health journey. Could you try rephrasing your question?"
 
 
 def get_user_medications_summary(user_id):
@@ -1100,16 +1161,17 @@ def schedule_weekly_reports():
 
 
 # Initialize all schedulers on app startup
-@app.before_request
-def init_schedulers():
-    """Initialize schedulers on first request"""
-    if not hasattr(app, 'schedulers_initialized'):
-        with app.app_context():
-            schedule_medication_reminders()
-            schedule_water_reminders()
-            schedule_daily_report()
-            schedule_weekly_reports()
-            app.schedulers_initialized = True
+# Disabled to fix 422 errors - schedulers can be initialized elsewhere
+# @app.before_request
+# def init_schedulers():
+#     """Initialize schedulers on first request"""
+#     if not hasattr(app, 'schedulers_initialized'):
+#         with app.app_context():
+#             schedule_medication_reminders()
+#             schedule_water_reminders()
+#             schedule_daily_report()
+#             schedule_weekly_reports()
+#             app.schedulers_initialized = True
 
 
 if __name__ == '__main__':
