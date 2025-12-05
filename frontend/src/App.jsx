@@ -560,49 +560,58 @@ function MainDashboard({ token, onLogout }) {
     if (!profile) return;
 
     const scheduleItems = [];
-    const wakeTime = 6; // 6 AM
     const sleepHours = parseInt(profile.sleep_goal_hours) || 8;
-    const sleepTime = 24 - (24 - sleepHours); // Calculate sleep time based on 6 AM wake
+    
+    // Calculate wake and sleep times
+    const wakeTime = 7; // 7 AM wake up
+    const bedTime = 22; // 10 PM default bedtime
+    const actualBedTime = (wakeTime + 24 - sleepHours) % 24; // Calculate bedtime based on wake time and sleep hours
+    const finalBedTime = actualBedTime < 20 ? 22 : actualBedTime; // Use 10 PM if calculated time is too early
 
-    // Water reminders (every hour from wake to sleep - 1 hour)
-    for (let h = wakeTime; h < wakeTime + sleepHours - 1; h++) {
+    // Add wake up time
+    scheduleItems.push({
+      time: `${wakeTime}:00`,
+      activity: '⏰ Wake Up',
+      type: 'sleep'
+    });
+
+    // Water reminders (every 2 hours during waking hours)
+    for (let h = wakeTime + 1; h < finalBedTime; h += 2) {
       const hour = h % 24;
       scheduleItems.push({
-        time: `${hour}:00`,
-        activity: 'Drink Water',
+        time: `${hour.toString().padStart(2, '0')}:00`,
+        activity: '💧 Drink Water',
         type: 'water'
       });
     }
 
-    // Breakfast (1 hour before work)
-    const [wsHour] = (profile.work_start_time || '09:00').split(':').map(Number);
-    const breakfastHour = Math.max(wsHour - 1, 0);
+    // Breakfast (1 hour after wake)
+    const breakfastHour = wakeTime + 1;
     scheduleItems.push({
-      time: `${breakfastHour}:00`,
-      activity: 'Breakfast',
+      time: `${breakfastHour.toString().padStart(2, '0')}:00`,
+      activity: '🍳 Breakfast',
       type: 'food'
     });
 
     // Lunch
     scheduleItems.push({
       time: '12:30',
-      activity: 'Lunch',
+      activity: '🍽️ Lunch',
       type: 'food'
     });
 
-    // Dinner (2 hours before bed)
-    const bedTime = (wakeTime + sleepHours) % 24;
-    const dinnerHour = bedTime - 2;
+    // Dinner (3 hours before bed)
+    const dinnerHour = finalBedTime - 3;
     scheduleItems.push({
-      time: `${Math.max(dinnerHour, 0)}:00`,
-      activity: 'Dinner',
+      time: `${dinnerHour.toString().padStart(2, '0')}:00`,
+      activity: '🍲 Dinner',
       type: 'food'
     });
 
     // Sleep suggestion
     scheduleItems.push({
-      time: `${bedTime}:00`,
-      activity: 'Sleep Time',
+      time: `${finalBedTime.toString().padStart(2, '0')}:00`,
+      activity: `😴 Sleep Time (${sleepHours}h needed)`,
       type: 'sleep'
     });
 
