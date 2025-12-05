@@ -523,9 +523,11 @@ function MainDashboard({ token, onLogout }) {
   const [profile, setProfile] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [schedule, setSchedule] = useState([]);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
   useEffect(() => {
     fetchProfile();
+    requestNotificationPermission();
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, [token]);
@@ -535,6 +537,69 @@ function MainDashboard({ token, onLogout }) {
       generateSchedule();
     }
   }, [profile]);
+
+  useEffect(() => {
+    if (schedule.length > 0 && notificationsEnabled) {
+      startNotifications();
+    }
+  }, [schedule, notificationsEnabled]);
+
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      setNotificationsEnabled(permission === 'granted');
+    }
+  };
+
+  const startNotifications = () => {
+    const checkSchedule = () => {
+      const now = new Date();
+      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+      
+      schedule.forEach(item => {
+        if (item.time === currentTime) {
+          showNotification(item.activity, item.type);
+        }
+      });
+    };
+
+    // Check every minute
+    const interval = setInterval(checkSchedule, 60000);
+    checkSchedule(); // Check immediately
+
+    return () => clearInterval(interval);
+  };
+
+  const showNotification = (message, type) => {
+    if (!notificationsEnabled) return;
+
+    const icons = {
+      water: '💧',
+      food: '🍽️',
+      medication: '💊',
+      break: '🧘',
+      sleep: '😴'
+    };
+
+    const icon = icons[type] || '⏰';
+    
+    new Notification('HealMate Reminder', {
+      body: `${icon} ${message}`,
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      tag: type,
+      requireInteraction: false
+    });
+
+    // Also play a sound (optional)
+    try {
+      const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSl+zPLTgjMGHm7A7+OZSA0PVqzn77BdGAk+ltryxnYpBSh9y/LUgzQGHW+/7+OaRw4NVavl8bFaFgs9k9nyyHkrBSh7yvLWhTQGHW+/7+OZSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OZSA8NV6vl8LFaFgs9lNnyyHkrBSh7yvLWhTQGHW+/7+OZSA8NV6vl8LFaFgs9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFgs9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFgs9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9');
+      audio.volume = 0.3;
+      audio.play().catch(() => {}); // Ignore errors if autoplay is blocked
+    } catch (e) {
+      // Ignore audio errors
+    }
+  };
 
   const fetchProfile = async () => {
     try {
@@ -574,16 +639,6 @@ function MainDashboard({ token, onLogout }) {
       activity: '⏰ Wake Up',
       type: 'sleep'
     });
-
-    // Water reminders (every 2 hours during waking hours)
-    for (let h = wakeTime + 1; h < finalBedTime; h += 2) {
-      const hour = h % 24;
-      scheduleItems.push({
-        time: `${hour.toString().padStart(2, '0')}:00`,
-        activity: '💧 Drink Water',
-        type: 'water'
-      });
-    }
 
     // Break reminders (every 5 minutes for demo)
     const now = new Date();
@@ -631,12 +686,42 @@ function MainDashboard({ token, onLogout }) {
 
     // Add medications
     if (profile.medications && profile.medications.length > 0) {
-      scheduleItems.push({
-        time: '08:00',
-        activity: `Take Medication: ${profile.medications[0].name}`,
-        type: 'medication'
+      profile.medications.forEach(med => {
+        scheduleItems.push({
+          time: '08:00',
+          activity: `💊 Take Medication: ${med.name}`,
+          type: 'medication'
+        });
+        // Add evening dose if needed
+        scheduleItems.push({
+          time: '20:00',
+          activity: `💊 Take Medication: ${med.name}`,
+          type: 'medication'
+        });
       });
     }
+
+    // Add water reminders with specific times
+    scheduleItems.push({
+      time: '10:00',
+      activity: '💧 Drink Water (Glass 1)',
+      type: 'water'
+    });
+    scheduleItems.push({
+      time: '14:00',
+      activity: '💧 Drink Water (Glass 2)',
+      type: 'water'
+    });
+    scheduleItems.push({
+      time: '16:00',
+      activity: '💧 Drink Water (Glass 3)',
+      type: 'water'
+    });
+    scheduleItems.push({
+      time: '18:00',
+      activity: '💧 Drink Water (Glass 4)',
+      type: 'water'
+    });
 
     // Sort by time
     scheduleItems.sort((a, b) => {
