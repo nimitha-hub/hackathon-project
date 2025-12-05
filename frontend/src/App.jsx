@@ -153,10 +153,18 @@ function ProfileSetupPage({ token, onComplete }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Check if profile has valid data
+    if (!profile.nickname) {
+      alert('Please enter a nickname');
+      return;
+    }
+    
     setSaving(true);
     
     try {
       console.log('Submitting profile:', profile);
+      console.log('Token:', token);
       
       const profileResponse = await fetch('http://localhost:5000/api/user/profile', {
         method: 'PUT',
@@ -176,8 +184,9 @@ function ProfileSetupPage({ token, onComplete }) {
         
         // Save medications if any
         if (medications.length > 0) {
+          console.log('Saving medications:', medications);
           for (const med of medications) {
-            await fetch('http://localhost:5000/api/medications', {
+            const medResponse = await fetch('http://localhost:5000/api/medications', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -185,10 +194,12 @@ function ProfileSetupPage({ token, onComplete }) {
               },
               body: JSON.stringify(med)
             });
+            console.log('Medication response status:', medResponse.status);
           }
         }
         
         localStorage.setItem('profileSetup', 'true');
+        alert('Profile saved successfully! Redirecting to dashboard...');
         onComplete();
       } else {
         alert('Failed to save profile: ' + (profileData.error || 'Unknown error'));
@@ -525,12 +536,18 @@ function MainDashboard({ token, onLogout }) {
 
   const fetchProfile = async () => {
     try {
+      console.log('Fetching profile with token:', token);
       const response = await fetch('http://localhost:5000/api/user/profile', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      console.log('Profile response status:', response.status);
       if (response.ok) {
         const data = await response.json();
+        console.log('Profile data:', data);
         setProfile(data);
+      } else {
+        const error = await response.json();
+        console.error('Profile fetch failed:', error);
       }
     } catch (err) {
       console.error('Failed to fetch profile:', err);
