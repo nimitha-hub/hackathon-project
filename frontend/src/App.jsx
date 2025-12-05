@@ -429,7 +429,7 @@ function ChatPage({ token }) {
           ) : (
             messages.map((msg, idx) => (
               <div key={idx} className={`chat-message ${msg.role}`}>
-                <p>{msg.message}</p>
+                <pre style={{whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0}}>{msg.message}</pre>
               </div>
             ))
           )}
