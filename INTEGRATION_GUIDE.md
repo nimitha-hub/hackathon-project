@@ -291,7 +291,7 @@ To deploy HealthPal to Heroku:
 DEPLOYMENT_RAILWAY = """
 To deploy to Railway (easier than Heroku):
 
-1. Go to https://railway.app
+1. Go to 
 2. Click "New Project"
 3. Connect GitHub repo
 4. Select backend directory

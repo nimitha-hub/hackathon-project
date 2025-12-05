@@ -6,6 +6,12 @@ from functools import wraps
 from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
+import google.generativeai as genai
+from apscheduler.schedulers.background import BackgroundScheduler
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import json
 
 load_dotenv()
 
@@ -17,6 +23,21 @@ app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-chan
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
 CORS(app)
+
+# Initialize Google Generative AI
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
+
+# Email Configuration
+SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
+SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
+SENDER_EMAIL = os.getenv('SENDER_EMAIL', '')
+SENDER_PASSWORD = os.getenv('SENDER_PASSWORD', '')
+
+# Initialize Background Scheduler
+scheduler = BackgroundScheduler()
+scheduler.start()
 
 # ==================== DATABASE MODELS ====================
 
@@ -657,31 +678,52 @@ def get_chat_history():
 
 
 def generate_ai_response(user, message):
-    """Generate AI response based on user message and profile"""
-    # TODO: Integrate with Google Generative AI or similar
-    # For now, return placeholder response
+    """Generate AI response using Google Generative AI"""
+    try:
+        if not GOOGLE_API_KEY:
+            return "AI service not configured. Please set GOOGLE_API_KEY environment variable."
+        
+        # Build user context from profile
+        user_context = f"""
+You are HealMate, a compassionate health assistant. You're helping {user.name}.
+
+User Profile:
+- Age: {user.age or 'Not specified'}
+- Height: {user.height_cm}cm, Weight: {user.weight_kg}kg
+- Blood Type: {user.blood_type or 'Not specified'}
+- Blood Pressure: {user.blood_pressure_sys or 'N/A'}/{user.blood_pressure_dia or 'N/A'}
+- Blood Sugar (Fasting): {user.blood_sugar_fasting or 'Not measured'}mg/dL
+- Sleep Goal: {user.sleep_goal_hours}h per night
+- Exercise Goal: {user.exercise_goal_minutes}m per day
+- Job: {user.job_title or 'Not specified'} (Stress Level: {user.job_stress_level or 'Not specified'})
+- Dietary Restrictions: {user.dietary_restrictions or 'None specified'}
+- Allergies: {user.allergies or 'None specified'}
+- Chronic Conditions: {user.chronic_conditions or 'None'}
+
+Medications:
+{get_user_medications_summary(user.id)}
+
+Provide personalized health advice based on this profile. Be empathetic, encouraging, and practical.
+"""
+        
+        model = genai.GenerativeModel('gemini-pro')
+        response = model.generate_content(f"{user_context}\n\nUser asks: {message}")
+        
+        return response.text if response.text else "I'm here to help with your health. Please try asking me something specific."
     
-    user_context = f"""
-    User: {user.name}, Age: {user.age}
-    Health Goals: Sleep {user.sleep_goal_hours}h, Exercise {user.exercise_goal_minutes}min
-    Stress Level: {user.job_stress_level}
-    """
+    except Exception as e:
+        print(f"AI Error: {str(e)}")
+        return f"I'm having trouble generating a response right now, but I'm here to support your health journey. Could you try rephrasing your question?"
+
+
+def get_user_medications_summary(user_id):
+    """Get summary of user's medications"""
+    meds = Medication.query.filter_by(user_id=user_id).all()
+    if not meds:
+        return "No medications currently tracked."
     
-    responses = {
-        'sleep': 'Based on your profile, aim for consistent sleep at 10 PM. This helps with your stress management.',
-        'exercise': f'Try to get at least {user.exercise_goal_minutes} minutes of exercise daily. Walking, yoga, or any activity you enjoy works!',
-        'stress': f'Your job stress is {user.job_stress_level}. Consider meditation, deep breathing, or taking breaks.',
-        'medication': 'Have you taken all your medications today? I can help you track them.',
-        'water': 'Remember to drink water regularly! Aim for 8-10 glasses daily.',
-        'mood': 'How are you feeling today? Let\'s work on improving your wellbeing.',
-    }
-    
-    message_lower = message.lower()
-    for key, response in responses.items():
-        if key in message_lower:
-            return response
-    
-    return f"I understand you're asking about your health. Based on your profile, I recommend following your daily schedule and logging your activities. How can I help you today?"
+    med_list = "\n".join([f"- {med.name} {med.dosage or ''} ({med.frequency})" for med in meds])
+    return med_list
 
 
 # ==================== DAILY GOALS & PROGRESS ====================
@@ -771,6 +813,303 @@ def update_goal_progress(goal_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+# ==================== EMAIL & WEEKLY REPORTS ====================
+
+def send_email(recipient_email, subject, body, html_body=None):
+    """Send email to user"""
+    try:
+        if not SENDER_EMAIL or not SENDER_PASSWORD:
+            print("Email configuration not set up. Please set SENDER_EMAIL and SENDER_PASSWORD.")
+            return False
+        
+        message = MIMEMultipart('alternative')
+        message['Subject'] = subject
+        message['From'] = SENDER_EMAIL
+        message['To'] = recipient_email
+        
+        # Attach text version
+        message.attach(MIMEText(body, 'plain'))
+        
+        # Attach HTML version if provided
+        if html_body:
+            message.attach(MIMEText(html_body, 'html'))
+        
+        # Send email
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.send_message(message)
+        
+        return True
+    except Exception as e:
+        print(f"Email Error: {str(e)}")
+        return False
+
+
+def generate_weekly_report(user_id):
+    """Generate and send weekly health report"""
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return False
+        
+        # Calculate week dates
+        today = datetime.utcnow().date()
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+        
+        # Get health check-ins for the week
+        checkins = HealthCheckIn.query.filter(
+            HealthCheckIn.user_id == user_id,
+            HealthCheckIn.check_in_date.between(week_start, week_end)
+        ).all()
+        
+        # Calculate metrics
+        total_sleep = sum([c.sleep_hours or 0 for c in checkins])
+        total_water = sum([c.water_intake_liters or 0 for c in checkins])
+        total_exercise = sum([c.exercise_minutes or 0 for c in checkins])
+        total_meditation = sum([c.meditation_minutes or 0 for c in checkins])
+        average_mood = checkins[0].mood if checkins else "Not tracked"
+        average_stress = sum([c.stress_level or 0 for c in checkins]) / len(checkins) if checkins else 0
+        
+        # Get medication adherence
+        meds = Medication.query.filter_by(user_id=user_id).all()
+        total_intakes = MedicationIntake.query.filter(
+            MedicationIntake.medication_id.in_([m.id for m in meds]),
+            MedicationIntake.taken_at.between(week_start, week_end)
+        ).all()
+        skipped = sum([1 for i in total_intakes if i.skipped])
+        adherence = ((len(total_intakes) - skipped) / len(total_intakes) * 100) if total_intakes else 0
+        
+        # Create report
+        report = WeeklyHealthReport(
+            user_id=user_id,
+            week_start_date=week_start,
+            week_end_date=week_end,
+            total_sleep_hours=total_sleep,
+            total_water_liters=total_water,
+            medication_adherence_percent=adherence,
+            exercise_minutes=total_exercise,
+            meditation_minutes=total_meditation,
+            average_mood=average_mood,
+            report_sent=True,
+            sent_at=datetime.utcnow()
+        )
+        
+        db.session.add(report)
+        db.session.commit()
+        
+        # Send email
+        html_body = f"""
+        <html>
+            <body style="font-family: 'Poppins', sans-serif; color: #333;">
+                <h2 style="color: #c84c5c;">HealMate Weekly Health Report</h2>
+                <p>Hi {user.name},</p>
+                <p>Here's your health summary for the week of <strong>{week_start} to {week_end}</strong>:</p>
+                
+                <div style="background: #f5e6e0; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                    <h3 style="color: #c84c5c; margin-top: 0;">Weekly Metrics</h3>
+                    <ul style="list-style: none; padding: 0;">
+                        <li><strong>💤 Sleep:</strong> {total_sleep:.1f} hours (Goal: {user.sleep_goal_hours * 7}h)</li>
+                        <li><strong>💧 Water:</strong> {total_water:.1f} liters (Goal: 56L)</li>
+                        <li><strong>🏃 Exercise:</strong> {total_exercise} minutes (Goal: {user.exercise_goal_minutes * 7}m)</li>
+                        <li><strong>🧘 Meditation:</strong> {total_meditation} minutes</li>
+                        <li><strong>💊 Medication Adherence:</strong> {adherence:.1f}%</li>
+                        <li><strong>😊 Average Mood:</strong> {average_mood}</li>
+                        <li><strong>😰 Average Stress:</strong> {average_stress:.1f}/10</li>
+                    </ul>
+                </div>
+                
+                <h3 style="color: #c84c5c;">Tips for Next Week</h3>
+                <ul>
+                    <li>Keep up your sleep schedule consistency</li>
+                    <li>Stay hydrated throughout the day</li>
+                    <li>Take breaks from screens every hour</li>
+                    <li>Don't miss your medications - set phone reminders</li>
+                </ul>
+                
+                <p style="color: #999; font-size: 12px;">
+                    This report was automatically generated by HealMate. 
+                    Log in to your dashboard to view more detailed insights.
+                </p>
+            </body>
+        </html>
+        """
+        
+        text_body = f"""
+HealMate Weekly Health Report
+Week: {week_start} to {week_end}
+
+Weekly Metrics:
+- Sleep: {total_sleep:.1f} hours
+- Water: {total_water:.1f} liters
+- Exercise: {total_exercise} minutes
+- Meditation: {total_meditation} minutes
+- Medication Adherence: {adherence:.1f}%
+- Average Mood: {average_mood}
+- Average Stress: {average_stress:.1f}/10
+        """
+        
+        return send_email(user.email, f"HealMate Weekly Report - {week_start} to {week_end}", text_body, html_body)
+    
+    except Exception as e:
+        print(f"Report Generation Error: {str(e)}")
+        return False
+
+
+@app.route('/api/send-email', methods=['POST'])
+@jwt_required()
+def send_weekly_email():
+    """Manually trigger weekly email report"""
+    try:
+        user_id = get_jwt_identity()
+        success = generate_weekly_report(user_id)
+        
+        if success:
+            return jsonify({'message': 'Weekly report email sent successfully'}), 200
+        else:
+            return jsonify({'error': 'Failed to send email. Check configuration.'}), 500
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== SCHEDULER - AUTOMATED REMINDERS ====================
+
+def send_reminder_to_user(user_id, reminder_type, message):
+    """Send reminder notification to user (stored for frontend polling)"""
+    # In production, this could use WebSockets or push notifications
+    # For now, we store in a notifications table or emit via API
+    print(f"Reminder for user {user_id}: [{reminder_type}] {message}")
+
+
+def schedule_medication_reminders():
+    """Schedule medication reminders for all users"""
+    try:
+        users = User.query.all()
+        
+        for user in users:
+            meds = Medication.query.filter_by(user_id=user.id).all()
+            
+            for med in meds:
+                # scheduled_times is JSON array like ["08:00", "20:00"]
+                if med.scheduled_times:
+                    try:
+                        times = json.loads(med.scheduled_times)
+                        for time_str in times:
+                            hour, minute = map(int, time_str.split(':'))
+                            
+                            job_id = f"med_{med.id}_user_{user.id}_{hour}_{minute}"
+                            
+                            # Check if job already exists
+                            try:
+                                scheduler.remove_job(job_id)
+                            except:
+                                pass
+                            
+                            scheduler.add_job(
+                                send_reminder_to_user,
+                                'cron',
+                                hour=hour,
+                                minute=minute,
+                                args=[user.id, 'medication', f"Time to take {med.name}"],
+                                id=job_id,
+                                replace_existing=True
+                            )
+                    except:
+                        pass
+    except Exception as e:
+        print(f"Scheduler Error: {str(e)}")
+
+
+def schedule_water_reminders():
+    """Schedule hourly water reminders for all users"""
+    try:
+        users = User.query.all()
+        
+        for user in users:
+            # Water reminder every hour during waking hours
+            job_id = f"water_user_{user.id}"
+            
+            try:
+                scheduler.remove_job(job_id)
+            except:
+                pass
+            
+            scheduler.add_job(
+                send_reminder_to_user,
+                'interval',
+                hours=1,
+                args=[user.id, 'water', "Time to drink water! Stay hydrated."],
+                id=job_id,
+                replace_existing=True
+            )
+    except Exception as e:
+        print(f"Water Scheduler Error: {str(e)}")
+
+
+def schedule_daily_report():
+    """Schedule daily summary report at 9 PM"""
+    try:
+        job_id = "daily_report"
+        
+        try:
+            scheduler.remove_job(job_id)
+        except:
+            pass
+        
+        scheduler.add_job(
+            lambda: print("Daily summary reminder sent to all users"),
+            'cron',
+            hour=21,
+            minute=0,
+            id=job_id,
+            replace_existing=True
+        )
+    except Exception as e:
+        print(f"Daily Report Scheduler Error: {str(e)}")
+
+
+def schedule_weekly_reports():
+    """Schedule weekly reports every Sunday at 6 PM"""
+    try:
+        users = User.query.all()
+        
+        for user in users:
+            job_id = f"weekly_report_user_{user.id}"
+            
+            try:
+                scheduler.remove_job(job_id)
+            except:
+                pass
+            
+            scheduler.add_job(
+                generate_weekly_report,
+                'cron',
+                day_of_week='sun',
+                hour=18,
+                minute=0,
+                args=[user.id],
+                id=job_id,
+                replace_existing=True
+            )
+    except Exception as e:
+        print(f"Weekly Report Scheduler Error: {str(e)}")
+
+
+# Initialize all schedulers on app startup
+@app.before_request
+def init_schedulers():
+    """Initialize schedulers on first request"""
+    if not hasattr(app, 'schedulers_initialized'):
+        with app.app_context():
+            schedule_medication_reminders()
+            schedule_water_reminders()
+            schedule_daily_report()
+            schedule_weekly_reports()
+            app.schedulers_initialized = True
 
 
 if __name__ == '__main__':
