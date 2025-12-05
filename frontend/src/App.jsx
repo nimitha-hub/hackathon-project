@@ -585,6 +585,20 @@ function MainDashboard({ token, onLogout }) {
       });
     }
 
+    // Break reminders (every 5 minutes for demo)
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    for (let i = 0; i < 12; i++) { // Next 12 reminders (1 hour worth)
+      const nextMinute = (currentMinute + (i * 5)) % 60;
+      const nextHour = currentHour + Math.floor((currentMinute + (i * 5)) / 60);
+      scheduleItems.push({
+        time: `${nextHour.toString().padStart(2, '0')}:${nextMinute.toString().padStart(2, '0')}`,
+        activity: '🧘 Take a 5-min Break',
+        type: 'break'
+      });
+    }
+
     // Breakfast (1 hour after wake)
     const breakfastHour = wakeTime + 1;
     scheduleItems.push({
