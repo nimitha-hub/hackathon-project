@@ -7,6 +7,44 @@ from datetime import datetime, timedelta
 import os
 import sys
 import traceback
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Try to import AI libraries
+AI_AVAILABLE = False
+ai_provider = None
+
+# Try OpenAI first (more stable on Python 3.14)
+try:
+    from openai import OpenAI
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    if OPENAI_API_KEY:
+        openai_client = OpenAI(api_key=OPENAI_API_KEY)
+        AI_AVAILABLE = True
+        ai_provider = 'openai'
+        print("OpenAI configured successfully")
+except Exception as e:
+    print(f"OpenAI not available: {e}")
+
+# Try Google AI as fallback
+if not AI_AVAILABLE:
+    try:
+        import google.generativeai as genai
+        GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+        if GOOGLE_API_KEY:
+            genai.configure(api_key=GOOGLE_API_KEY)
+            ai_model = genai.GenerativeModel('gemini-pro')
+            AI_AVAILABLE = True
+            ai_provider = 'google'
+            print("Google AI configured successfully")
+        else:
+            print("No Google API key found")
+    except Exception as e:
+        print(f"Google AI not available: {e}")
+
+if not AI_AVAILABLE:
+    print("AI chat will use fallback responses - add OPENAI_API_KEY or fix Google AI")
 
 app = Flask(__name__)
 CORS(app)
@@ -166,14 +204,79 @@ def chat():
         data = request.get_json()
         message = data.get('message', '')
         
-        # Simplified response without Google AI
-        response = f"I received your message: '{message}'. The AI chat feature will be fully functional once the Google AI SDK is properly configured."
+        if not message:
+            return jsonify({'error': 'Message is required'}), 400
+        
+        # Try to use AI if available
+        if AI_AVAILABLE:
+            try:
+                user_id = int(get_jwt_identity())
+                user = User.query.get(user_id)
+                
+                # Build context prompt with user health data
+                context = "You are a health assistant. "
+                if user.nickname:
+                    context += f"User name: {user.nickname}. "
+                if user.height_cm and user.weight_kg:
+                    bmi = user.weight_kg / ((user.height_cm / 100) ** 2)
+                    context += f"BMI: {bmi:.1f}. "
+                if user.blood_type:
+                    context += f"Blood type: {user.blood_type}. "
+                
+                context += "Provide helpful, accurate health advice. Keep responses concise and friendly."
+                
+                # Generate AI response based on provider
+                if ai_provider == 'openai':
+                    response = openai_client.chat.completions.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {"role": "system", "content": context},
+                            {"role": "user", "content": message}
+                        ],
+                        max_tokens=200
+                    )
+                    assistant_response = response.choices[0].message.content
+                elif ai_provider == 'google':
+                    prompt = f"{context}\n\nUser question: {message}"
+                    response = ai_model.generate_content(prompt)
+                    assistant_response = response.text
+                else:
+                    raise Exception("No AI provider available")
+                
+                return jsonify({
+                    'assistant_response': assistant_response,
+                    'message': f'AI response from {ai_provider}'
+                }), 200
+                
+            except Exception as ai_error:
+                print(f"AI generation error: {ai_error}")
+                # Fall through to fallback
+        
+        # Fallback response
+        fallback_responses = {
+            'health': 'I can help with health-related questions. Please tell me more about your health concerns.',
+            'medication': 'Medications are important for managing health. Do you have any questions about your medications?',
+            'sleep': 'Good sleep is essential for health. Try to maintain consistent sleep schedules.',
+            'exercise': 'Regular exercise is beneficial. Aim for at least 30 minutes of activity daily.',
+            'diet': 'A balanced diet with plenty of fruits and vegetables supports overall health.',
+            'water': 'Staying hydrated is important. Aim for 8 glasses of water per day.'
+        }
+        
+        response_text = 'I am your HealMate assistant. How can I help you with your health today?'
+        message_lower = message.lower()
+        for keyword, response in fallback_responses.items():
+            if keyword in message_lower:
+                response_text = response
+                break
         
         return jsonify({
-            'assistant_response': response,
-            'message': 'Chat response (simplified mode)'
+            'assistant_response': response_text,
+            'message': 'Chat response (fallback mode - set GOOGLE_API_KEY for AI)'
         }), 200
+        
     except Exception as e:
+        print(f"Chat error: {e}")
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/chat/history', methods=['GET'])
