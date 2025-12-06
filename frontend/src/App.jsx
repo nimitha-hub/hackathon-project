@@ -16,15 +16,20 @@ function LoginPage({ onLogin }) {
     e.preventDefault();
     setError('');
     
+    console.log('Login attempt with:', { email, isRegister });
+    console.log('API URL:', API_URL);
+    
     try {
       let response;
       if (isRegister) {
+        console.log('Registering...');
         response = await fetch(`${API_URL}/api/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password, name })
         });
       } else {
+        console.log('Logging in...');
         response = await fetch(`${API_URL}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -32,17 +37,21 @@ function LoginPage({ onLogin }) {
         });
       }
       
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
       
       if (response.ok) {
         localStorage.setItem('token', data.access_token);
         localStorage.setItem('userId', data.user_id);
+        console.log('Login successful, calling onLogin');
         onLogin();
       } else {
         setError(data.error || (isRegister ? 'Registration failed' : 'Login failed'));
       }
     } catch (err) {
-      setError(err.message || 'Network error');
+      console.error('Login error:', err);
+      setError(err.message || 'Network error - make sure backend is running');
     }
   };
 
