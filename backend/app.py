@@ -283,6 +283,16 @@ def get_user_profile():
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
+        # Get medications
+        medications = Medication.query.filter_by(user_id=user_id).all()
+        medications_list = [{
+            'id': med.id,
+            'name': med.name,
+            'dosage': med.dosage,
+            'frequency': med.frequency,
+            'stock_quantity': med.stock_quantity
+        } for med in medications]
+        
         return jsonify({
             'id': user.id,
             'email': user.email,
@@ -306,6 +316,7 @@ def get_user_profile():
             'chronic_conditions': user.chronic_conditions,
             'meditation_preference': user.meditation_preference,
             'video_reminder_interval': user.video_reminder_interval,
+            'medications': medications_list,
             'created_at': user.created_at.isoformat()
         }), 200
         
