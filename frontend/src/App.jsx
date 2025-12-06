@@ -59,6 +59,7 @@ function LoginPage({ onLogin }) {
     <div className="auth-container">
       <div className="auth-card">
         <h1 className="healmate-title">HealMate</h1>
+        <p className="healmate-tagline">An AI-powered health companion</p>
         <h2>{isRegister ? 'Create Account' : 'Login'}</h2>
         
         {error && <div className="error-message">{error}</div>}
@@ -505,12 +506,41 @@ function MainDashboard({ token, onLogout }) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [schedule, setSchedule] = useState([]);
   const [loadingError, setLoadingError] = useState(null);
+  const [dailyGoals, setDailyGoals] = useState({
+    medications: {},
+    water: 0,
+    meals: { breakfast: false, lunch: false, dinner: false }
+  });
 
   useEffect(() => {
     fetchProfile();
+    requestNotificationPermission();
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
+    const breakReminder = setInterval(() => {
+      showNotification('🧘 Break Time!', 'Take a 30-second break from your screen to rest your eyes.');
+    }, 30 * 60 * 1000); // 30 minutes
+    return () => {
+      clearInterval(timer);
+      clearInterval(breakReminder);
+    };
   }, [token]);
+
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      const permission = await Notification.requestPermission();
+      console.log('Notification permission:', permission);
+    }
+  };
+
+  const showNotification = (title, body) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, {
+        body: body,
+        icon: '/favicon.ico',
+        badge: '/favicon.ico'
+      });
+    }
+  };
 
   useEffect(() => {
     if (profile) {
@@ -782,20 +812,120 @@ function MainDashboard({ token, onLogout }) {
         {/* Daily Goals Page */}
         {currentPage === 'daily' && (
           <div className="daily-page">
-            <h2>Daily Goals</h2>
-            <div className="goals-container">
-              <div className="goal-card">
-                <h3>Medications</h3>
-                <p>0 / {profile.medications?.length || 0} taken</p>
+            <h2>Daily Goals Tracker</h2>
+            
+            {/* Medications Section */}
+            <div className="goal-section">
+              <h3>💊 Medications</h3>
+              {profile.medications && profile.medications.length > 0 ? (
+                profile.medications.map((med, index) => (
+                  <div key={index} className="goal-item">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={dailyGoals.medications[index] || false}
+                        onChange={(e) => {
+                          setDailyGoals({
+                            ...dailyGoals,
+                            medications: {
+                              ...dailyGoals.medications,
+                              [index]: e.target.checked
+                            }
+                          });
+                        }}
+                      />
+                      <span>{med.name} - {med.dosage}</span>
+                    </label>
+                  </div>
+                ))
+              ) : (
+                <p>No medications added</p>
+              )}
+            </div>
+
+            {/* Water Intake Section */}
+            <div className="goal-section">
+              <h3>💧 Water Intake</h3>
+              <div className="water-tracker">
+                {[...Array(8)].map((_, i) => (
+                  <button
+                    key={i}
+                    className={`water-glass ${i < dailyGoals.water ? 'filled' : ''}`}
+                    onClick={() => setDailyGoals({ ...dailyGoals, water: i + 1 })}
+                  >
+                    {i < dailyGoals.water ? '💧' : '🥤'}
+                  </button>
+                ))}
               </div>
-              <div className="goal-card">
-                <h3>Water Intake</h3>
-                <p>0 / 8 glasses</p>
+              <p>{dailyGoals.water} / 8 glasses</p>
+            </div>
+
+            {/* Meals Section */}
+            <div className="goal-section">
+              <h3>🍽️ Meals</h3>
+              <div className="goal-item">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={dailyGoals.meals.breakfast}
+                    onChange={(e) => setDailyGoals({
+                      ...dailyGoals,
+                      meals: { ...dailyGoals.meals, breakfast: e.target.checked }
+                    })}
+                  />
+                  <span>Breakfast</span>
+                </label>
               </div>
-              <div className="goal-card">
-                <h3>Meals</h3>
-                <p>0 / 3 completed</p>
+              <div className="goal-item">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={dailyGoals.meals.lunch}
+                    onChange={(e) => setDailyGoals({
+                      ...dailyGoals,
+                      meals: { ...dailyGoals.meals, lunch: e.target.checked }
+                    })}
+                  />
+                  <span>Lunch</span>
+                </label>
               </div>
+              <div className="goal-item">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={dailyGoals.meals.dinner}
+                    onChange={(e) => setDailyGoals({
+                      ...dailyGoals,
+                      meals: { ...dailyGoals.meals, dinner: e.target.checked }
+                    })}
+                  />
+                  <span>Dinner</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="progress-section">
+              <h3>Overall Progress</h3>
+              <div className="progress-bar">
+                <div 
+                  className="progress-fill" 
+                  style={{ 
+                    width: `${(
+                      (Object.values(dailyGoals.medications).filter(Boolean).length / Math.max(profile.medications?.length || 1, 1)) * 33 +
+                      (dailyGoals.water / 8) * 33 +
+                      (Object.values(dailyGoals.meals).filter(Boolean).length / 3) * 34
+                    ).toFixed(0)}%`
+                  }}
+                ></div>
+              </div>
+              <p className="progress-text">
+                {(
+                  (Object.values(dailyGoals.medications).filter(Boolean).length / Math.max(profile.medications?.length || 1, 1)) * 33 +
+                  (dailyGoals.water / 8) * 33 +
+                  (Object.values(dailyGoals.meals).filter(Boolean).length / 3) * 34
+                ).toFixed(0)}% Complete
+              </p>
             </div>
           </div>
         )}
