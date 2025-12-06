@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './app.css';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-
 // ==================== LOGIN PAGE ====================
 
 function LoginPage({ onLogin }) {
@@ -19,13 +17,13 @@ function LoginPage({ onLogin }) {
     try {
       let response;
       if (isRegister) {
-        response = await fetch(`${API_URL}/api/auth/register`, {
+        response = await fetch('http://localhost:5000/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password, name })
         });
       } else {
-        response = await fetch(`${API_URL}/api/auth/login`, {
+        response = await fetch('http://localhost:5000/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })
@@ -44,11 +42,6 @@ function LoginPage({ onLogin }) {
     } catch (err) {
       setError(err.message || 'Network error');
     }
-  };
-
-  const handleClearStorage = () => {
-    localStorage.clear();
-    window.location.reload();
   };
 
   return (
@@ -101,15 +94,6 @@ function LoginPage({ onLogin }) {
             {isRegister ? 'Login' : 'Register'}
           </button>
         </p>
-        
-        <button 
-          type="button" 
-          className="btn-reset"
-          onClick={handleClearStorage}
-          style={{ marginTop: '10px', fontSize: '12px' }}
-        >
-          Clear Cache & Reset
-        </button>
       </div>
     </div>
   );
@@ -126,14 +110,16 @@ function ProfileSetupPage({ token, onComplete }) {
     blood_pressure_sys: '',
     blood_pressure_dia: '',
     blood_sugar_fasting: '',
-    sleep_goal_hours: '8'
+    sleep_goal_hours: '',
+    work_start_time: '09:00',
+    work_end_time: '17:00',
+    medications: []
   });
-  const [medications, setMedications] = useState([]);
   const [newMed, setNewMed] = useState({
     name: '',
-    dosage: '',
+    dose: '',
     frequency: '',
-    stock_quantity: ''
+    stock: ''
   });
   const [saving, setSaving] = useState(false);
 
@@ -143,32 +129,28 @@ function ProfileSetupPage({ token, onComplete }) {
   };
 
   const handleAddMedication = () => {
-    if (newMed.name && newMed.dosage && newMed.frequency && newMed.stock_quantity) {
-      setMedications(prev => [...prev, newMed]);
-      setNewMed({ name: '', dosage: '', frequency: '', stock_quantity: '' });
+    if (newMed.name && newMed.dose && newMed.frequency && newMed.stock) {
+      setProfile(prev => ({
+        ...prev,
+        medications: [...prev.medications, newMed]
+      }));
+      setNewMed({ name: '', dose: '', frequency: '', stock: '' });
     }
   };
 
   const handleRemoveMedication = (index) => {
-    setMedications(prev => prev.filter((_, i) => i !== index));
+    setProfile(prev => ({
+      ...prev,
+      medications: prev.medications.filter((_, i) => i !== index)
+    }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Check if profile has valid data
-    if (!profile.nickname) {
-      alert('Please enter a nickname');
-      return;
-    }
-    
     setSaving(true);
     
     try {
-      console.log('Submitting profile:', profile);
-      console.log('Token:', token);
-      
-      const profileResponse = await fetch(`${API_URL}/api/user/profile`, {
+      const response = await fetch('http://localhost:5000/api/user/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -177,38 +159,12 @@ function ProfileSetupPage({ token, onComplete }) {
         body: JSON.stringify(profile)
       });
       
-      console.log('Profile response status:', profileResponse.status);
-      const profileData = await profileResponse.json();
-      console.log('Profile response data:', profileData);
-      
-      if (profileResponse.ok) {
-        console.log('Profile saved successfully');
-        
-        // Save medications if any
-        if (medications.length > 0) {
-          console.log('Saving medications:', medications);
-          for (const med of medications) {
-            const medResponse = await fetch(`${API_URL}/api/medications`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify(med)
-            });
-            console.log('Medication response status:', medResponse.status);
-          }
-        }
-        
+      if (response.ok) {
         localStorage.setItem('profileSetup', 'true');
-        alert('Profile saved successfully! Redirecting to dashboard...');
         onComplete();
-      } else {
-        alert('Failed to save profile: ' + (profileData.error || 'Unknown error'));
       }
     } catch (err) {
       console.error('Profile update failed:', err);
-      alert('Error saving profile: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -290,9 +246,9 @@ function ProfileSetupPage({ token, onComplete }) {
             />
           </div>
 
-          {/* Sleep */}
+          {/* Sleep & Work */}
           <div className="setup-section">
-            <h3>Sleep Goal</h3>
+            <h3>Sleep & Work Schedule</h3>
             <input
               type="number"
               name="sleep_goal_hours"
@@ -300,6 +256,20 @@ function ProfileSetupPage({ token, onComplete }) {
               value={profile.sleep_goal_hours}
               onChange={handleProfileChange}
             />
+            <div className="setup-row">
+              <input
+                type="time"
+                name="work_start_time"
+                value={profile.work_start_time}
+                onChange={handleProfileChange}
+              />
+              <input
+                type="time"
+                name="work_end_time"
+                value={profile.work_end_time}
+                onChange={handleProfileChange}
+              />
+            </div>
           </div>
 
           {/* Medications */}
@@ -315,8 +285,8 @@ function ProfileSetupPage({ token, onComplete }) {
               <input
                 type="text"
                 placeholder="Dose (e.g., 500mg)"
-                value={newMed.dosage}
-                onChange={(e) => setNewMed({...newMed, dosage: e.target.value})}
+                value={newMed.dose}
+                onChange={(e) => setNewMed({...newMed, dose: e.target.value})}
               />
               <input
                 type="text"
@@ -327,19 +297,19 @@ function ProfileSetupPage({ token, onComplete }) {
               <input
                 type="number"
                 placeholder="Stock Qty"
-                value={newMed.stock_quantity}
-                onChange={(e) => setNewMed({...newMed, stock_quantity: e.target.value})}
+                value={newMed.stock}
+                onChange={(e) => setNewMed({...newMed, stock: e.target.value})}
               />
               <button type="button" className="btn-add-med" onClick={handleAddMedication}>
                 + Add
               </button>
             </div>
 
-            {medications.length > 0 && (
+            {profile.medications.length > 0 && (
               <div className="med-list">
-                {medications.map((med, idx) => (
+                {profile.medications.map((med, idx) => (
                   <div key={idx} className="med-item">
-                    <span>{med.name} - {med.dosage}, {med.frequency}</span>
+                    <span>{med.name} - {med.dose}, {med.frequency}</span>
                     <button 
                       type="button" 
                       onClick={() => handleRemoveMedication(idx)}
@@ -376,7 +346,7 @@ function ChatPage({ token }) {
 
   const loadChatHistory = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/chat/history`, {
+      const response = await fetch('http://localhost:5000/api/chat/history', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -394,7 +364,7 @@ function ChatPage({ token }) {
 
     setLoading(true);
     try {
-      const response = await fetch(`${API_URL}/api/chat`, {
+      const response = await fetch('http://localhost:5000/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -431,7 +401,7 @@ function ChatPage({ token }) {
           ) : (
             messages.map((msg, idx) => (
               <div key={idx} className={`chat-message ${msg.role}`}>
-                <pre style={{whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0}}>{msg.message}</pre>
+                <p>{msg.message}</p>
               </div>
             ))
           )}
@@ -464,7 +434,7 @@ function EmailPage({ token }) {
     setSending(true);
     setMessage('');
     try {
-      const response = await fetch(`${API_URL}/api/send-email`, {
+      const response = await fetch('http://localhost:5000/api/send-email', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -523,18 +493,9 @@ function MainDashboard({ token, onLogout }) {
   const [profile, setProfile] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [schedule, setSchedule] = useState([]);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  
-  // Daily goals state
-  const [dailyGoals, setDailyGoals] = useState({
-    medications: [],
-    water: 0,
-    meals: { breakfast: false, lunch: false, dinner: false }
-  });
 
   useEffect(() => {
     fetchProfile();
-    requestNotificationPermission();
     const timer = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(timer);
   }, [token]);
@@ -545,91 +506,14 @@ function MainDashboard({ token, onLogout }) {
     }
   }, [profile]);
 
-  useEffect(() => {
-    if (schedule.length > 0 && notificationsEnabled) {
-      startNotifications();
-    }
-  }, [schedule, notificationsEnabled]);
-
-  const requestNotificationPermission = async () => {
-    if ('Notification' in window) {
-      const permission = await Notification.requestPermission();
-      setNotificationsEnabled(permission === 'granted');
-    }
-  };
-
-  const startNotifications = () => {
-    // Test notification immediately
-    if (notificationsEnabled) {
-      showNotification('Notifications are working! You will receive reminders at scheduled times.', 'break');
-    }
-
-    const checkSchedule = () => {
-      const now = new Date();
-      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-      
-      console.log('Checking schedule at:', currentTime); // Debug log
-      
-      schedule.forEach(item => {
-        if (item.time === currentTime) {
-          console.log('Triggering notification for:', item.activity); // Debug log
-          showNotification(item.activity, item.type);
-        }
-      });
-    };
-
-    // Check every 30 seconds (more frequent for demo)
-    const interval = setInterval(checkSchedule, 30000);
-    checkSchedule(); // Check immediately
-
-    return () => clearInterval(interval);
-  };
-
-  const showNotification = (message, type) => {
-    if (!notificationsEnabled) return;
-
-    const icons = {
-      water: '💧',
-      food: '🍽️',
-      medication: '💊',
-      break: '🧘',
-      sleep: '😴'
-    };
-
-    const icon = icons[type] || '⏰';
-    
-    new Notification('HealMate Reminder', {
-      body: `${icon} ${message}`,
-      icon: '/favicon.ico',
-      badge: '/favicon.ico',
-      tag: type,
-      requireInteraction: false
-    });
-
-    // Also play a sound (optional)
-    try {
-      const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSl+zPLTgjMGHm7A7+OZSA0PVqzn77BdGAk+ltryxnYpBSh9y/LUgzQGHW+/7+OaRw4NVavl8bFaFgs9k9nyyHkrBSh7yvLWhTQGHW+/7+OZSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OZSA8NV6vl8LFaFgs9lNnyyHkrBSh7yvLWhTQGHW+/7+OZSA8NV6vl8LFaFgs9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFgs9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFgs9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9lNnyyHkrBSh7yvLWhTQGHW+/7+OaSA8NV6vl8LFaFws9');
-      audio.volume = 0.3;
-      audio.play().catch(() => {}); // Ignore errors if autoplay is blocked
-    } catch (e) {
-      // Ignore audio errors
-    }
-  };
-
   const fetchProfile = async () => {
     try {
-      console.log('Fetching profile with token:', token);
-      const response = await fetch(`${API_URL}/api/user/profile`, {
+      const response = await fetch('http://localhost:5000/api/user/profile', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      console.log('Profile response status:', response.status);
       if (response.ok) {
         const data = await response.json();
-        console.log('Profile data:', data);
         setProfile(data);
-      } else {
-        const error = await response.json();
-        console.error('Profile fetch failed:', error);
       }
     } catch (err) {
       console.error('Failed to fetch profile:', err);
@@ -640,103 +524,60 @@ function MainDashboard({ token, onLogout }) {
     if (!profile) return;
 
     const scheduleItems = [];
+    const wakeTime = 6; // 6 AM
     const sleepHours = parseInt(profile.sleep_goal_hours) || 8;
-    
-    // Calculate wake and sleep times
-    const wakeTime = 7; // 7 AM wake up
-    const bedTime = 22; // 10 PM default bedtime
-    const actualBedTime = (wakeTime + 24 - sleepHours) % 24; // Calculate bedtime based on wake time and sleep hours
-    const finalBedTime = actualBedTime < 20 ? 22 : actualBedTime; // Use 10 PM if calculated time is too early
+    const sleepTime = 24 - (24 - sleepHours); // Calculate sleep time based on 6 AM wake
 
-    // Add wake up time
-    scheduleItems.push({
-      time: `${wakeTime}:00`,
-      activity: '⏰ Wake Up',
-      type: 'sleep'
-    });
-
-    // Break reminders (every 5 minutes for demo)
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    for (let i = 0; i < 12; i++) { // Next 12 reminders (1 hour worth)
-      const nextMinute = (currentMinute + (i * 5)) % 60;
-      const nextHour = currentHour + Math.floor((currentMinute + (i * 5)) / 60);
+    // Water reminders (every hour from wake to sleep - 1 hour)
+    for (let h = wakeTime; h < wakeTime + sleepHours - 1; h++) {
+      const hour = h % 24;
       scheduleItems.push({
-        time: `${nextHour.toString().padStart(2, '0')}:${nextMinute.toString().padStart(2, '0')}`,
-        activity: '🧘 Take a 5-min Break',
-        type: 'break'
+        time: `${hour}:00`,
+        activity: 'Drink Water',
+        type: 'water'
       });
     }
 
-    // Breakfast (1 hour after wake)
-    const breakfastHour = wakeTime + 1;
+    // Breakfast (1 hour before work)
+    const [wsHour] = (profile.work_start_time || '09:00').split(':').map(Number);
+    const breakfastHour = Math.max(wsHour - 1, 0);
     scheduleItems.push({
-      time: `${breakfastHour.toString().padStart(2, '0')}:00`,
-      activity: '🍳 Breakfast',
+      time: `${breakfastHour}:00`,
+      activity: 'Breakfast',
       type: 'food'
     });
 
     // Lunch
     scheduleItems.push({
       time: '12:30',
-      activity: '🍽️ Lunch',
+      activity: 'Lunch',
       type: 'food'
     });
 
-    // Dinner (3 hours before bed)
-    const dinnerHour = finalBedTime - 3;
+    // Dinner (2 hours before bed)
+    const bedTime = (wakeTime + sleepHours) % 24;
+    const dinnerHour = bedTime - 2;
     scheduleItems.push({
-      time: `${dinnerHour.toString().padStart(2, '0')}:00`,
-      activity: '🍲 Dinner',
+      time: `${Math.max(dinnerHour, 0)}:00`,
+      activity: 'Dinner',
       type: 'food'
     });
 
     // Sleep suggestion
     scheduleItems.push({
-      time: `${finalBedTime.toString().padStart(2, '0')}:00`,
-      activity: `😴 Sleep Time (${sleepHours}h needed)`,
+      time: `${bedTime}:00`,
+      activity: 'Sleep Time',
       type: 'sleep'
     });
 
     // Add medications
     if (profile.medications && profile.medications.length > 0) {
-      profile.medications.forEach(med => {
-        scheduleItems.push({
-          time: '08:00',
-          activity: `💊 Take Medication: ${med.name}`,
-          type: 'medication'
-        });
-        // Add evening dose if needed
-        scheduleItems.push({
-          time: '20:00',
-          activity: `💊 Take Medication: ${med.name}`,
-          type: 'medication'
-        });
+      scheduleItems.push({
+        time: '08:00',
+        activity: `Take Medication: ${profile.medications[0].name}`,
+        type: 'medication'
       });
     }
-
-    // Add water reminders with specific times
-    scheduleItems.push({
-      time: '10:00',
-      activity: '💧 Drink Water (Glass 1)',
-      type: 'water'
-    });
-    scheduleItems.push({
-      time: '14:00',
-      activity: '💧 Drink Water (Glass 2)',
-      type: 'water'
-    });
-    scheduleItems.push({
-      time: '16:00',
-      activity: '💧 Drink Water (Glass 3)',
-      type: 'water'
-    });
-    scheduleItems.push({
-      time: '18:00',
-      activity: '💧 Drink Water (Glass 4)',
-      type: 'water'
-    });
 
     // Sort by time
     scheduleItems.sort((a, b) => {
@@ -900,112 +741,19 @@ function MainDashboard({ token, onLogout }) {
         {/* Daily Goals Page */}
         {currentPage === 'daily' && (
           <div className="daily-page">
-            <h2>Daily Goals Tracker</h2>
-            
-            {/* Medications */}
-            <div className="goal-section">
-              <h3>💊 Medications ({dailyGoals.medications.filter(m => m.taken).length} / {profile.medications?.length || 0})</h3>
-              {profile.medications && profile.medications.length > 0 ? (
-                <div className="goal-items">
-                  {profile.medications.map((med, idx) => (
-                    <div key={idx} className="goal-item">
-                      <input 
-                        type="checkbox" 
-                        checked={dailyGoals.medications[idx]?.taken || false}
-                        onChange={() => {
-                          const newMeds = [...dailyGoals.medications];
-                          newMeds[idx] = { name: med.name, taken: !newMeds[idx]?.taken };
-                          setDailyGoals({...dailyGoals, medications: newMeds});
-                        }}
-                      />
-                      <label>{med.name} - {med.dosage}</label>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p>No medications added yet</p>
-              )}
-            </div>
-
-            {/* Water Intake */}
-            <div className="goal-section">
-              <h3>💧 Water Intake ({dailyGoals.water} / 8 glasses)</h3>
-              <div className="water-tracker">
-                {[...Array(8)].map((_, i) => (
-                  <button
-                    key={i}
-                    className={`water-glass ${i < dailyGoals.water ? 'filled' : ''}`}
-                    onClick={() => setDailyGoals({...dailyGoals, water: i + 1})}
-                  >
-                    {i < dailyGoals.water ? '💧' : '🥤'}
-                  </button>
-                ))}
+            <h2>Daily Goals</h2>
+            <div className="goals-container">
+              <div className="goal-card">
+                <h3>Medications</h3>
+                <p>0 / {profile.medications?.length || 0} taken</p>
               </div>
-              <button 
-                className="btn-reset-water"
-                onClick={() => setDailyGoals({...dailyGoals, water: 0})}
-              >
-                Reset
-              </button>
-            </div>
-
-            {/* Meals */}
-            <div className="goal-section">
-              <h3>🍽️ Meals ({Object.values(dailyGoals.meals).filter(m => m).length} / 3)</h3>
-              <div className="goal-items">
-                <div className="goal-item">
-                  <input 
-                    type="checkbox" 
-                    checked={dailyGoals.meals.breakfast}
-                    onChange={() => setDailyGoals({
-                      ...dailyGoals, 
-                      meals: {...dailyGoals.meals, breakfast: !dailyGoals.meals.breakfast}
-                    })}
-                  />
-                  <label>🍳 Breakfast</label>
-                </div>
-                <div className="goal-item">
-                  <input 
-                    type="checkbox" 
-                    checked={dailyGoals.meals.lunch}
-                    onChange={() => setDailyGoals({
-                      ...dailyGoals, 
-                      meals: {...dailyGoals.meals, lunch: !dailyGoals.meals.lunch}
-                    })}
-                  />
-                  <label>🍽️ Lunch</label>
-                </div>
-                <div className="goal-item">
-                  <input 
-                    type="checkbox" 
-                    checked={dailyGoals.meals.dinner}
-                    onChange={() => setDailyGoals({
-                      ...dailyGoals, 
-                      meals: {...dailyGoals.meals, dinner: !dailyGoals.meals.dinner}
-                    })}
-                  />
-                  <label>🍲 Dinner</label>
-                </div>
+              <div className="goal-card">
+                <h3>Water Intake</h3>
+                <p>0 / 8 glasses</p>
               </div>
-            </div>
-
-            {/* Progress Summary */}
-            <div className="goal-summary">
-              <h3>📊 Today's Progress</h3>
-              <div className="progress-bars">
-                <div className="progress-item">
-                  <label>Overall Completion</label>
-                  <div className="progress-bar">
-                    <div 
-                      className="progress-fill" 
-                      style={{
-                        width: `${((dailyGoals.medications.filter(m => m.taken).length / (profile.medications?.length || 1)) * 33 + 
-                               (dailyGoals.water / 8) * 33 + 
-                               (Object.values(dailyGoals.meals).filter(m => m).length / 3) * 34)}%`
-                      }}
-                    ></div>
-                  </div>
-                </div>
+              <div className="goal-card">
+                <h3>Meals</h3>
+                <p>0 / 3 completed</p>
               </div>
             </div>
           </div>
@@ -1040,18 +788,13 @@ function MainDashboard({ token, onLogout }) {
 
 export default function App() {
   // Debug logging for localStorage state
-  const storedToken = localStorage.getItem('token');
-  const storedProfileSetup = localStorage.getItem('profileSetup');
-  
   console.log('App mount:', {
-    token: storedToken,
-    profileSetup: storedProfileSetup,
-    isLoggedIn: !!storedToken
+    token: localStorage.getItem('token'),
+    profileSetup: localStorage.getItem('profileSetup')
   });
-  
-  const [isLoggedIn, setIsLoggedIn] = useState(!!storedToken);
-  const [token, setToken] = useState(storedToken);
-  const [profileSetup, setProfileSetup] = useState(storedProfileSetup === 'true');
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('token'));
+  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [profileSetup, setProfileSetup] = useState(localStorage.getItem('profileSetup') === 'true');
 
   const handleLogin = () => {
     const newToken = localStorage.getItem('token');
