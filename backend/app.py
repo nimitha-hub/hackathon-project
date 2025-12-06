@@ -22,7 +22,8 @@ app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key-chan
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
-CORS(app)
+# Allow requests from the frontend service on Render and localhost
+CORS(app, origins=["https://healmate-frontend.onrender.com", "http://localhost:3000"])
 
 # Initialize Google Generative AI
 # GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')
