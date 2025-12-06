@@ -161,6 +161,8 @@ function ProfileSetupPage({ token, onComplete }) {
     e.preventDefault();
     setSaving(true);
     
+    console.log('Submitting profile:', profile);
+    
     try {
       const response = await fetch(`${API_URL}/api/user/profile`, {
         method: 'PUT',
@@ -171,12 +173,20 @@ function ProfileSetupPage({ token, onComplete }) {
         body: JSON.stringify(profile)
       });
       
+      console.log('Profile save response:', response.status);
+      
       if (response.ok) {
+        console.log('Profile saved successfully!');
         localStorage.setItem('profileSetup', 'true');
         onComplete();
+      } else {
+        const errorData = await response.json();
+        console.error('Profile save failed:', errorData);
+        alert('Failed to save profile: ' + (errorData.error || 'Unknown error'));
       }
     } catch (err) {
       console.error('Profile update failed:', err);
+      alert('Network error: Could not save profile. Check if backend is running.');
     } finally {
       setSaving(false);
     }
@@ -321,7 +331,7 @@ function ProfileSetupPage({ token, onComplete }) {
               <div className="med-list">
                 {profile.medications.map((med, idx) => (
                   <div key={idx} className="med-item">
-                    <span>{med.name} - {med.dose}, {med.frequency}</span>
+                    <span>{med.name} - {med.dosage}, {med.frequency}</span>
                     <button 
                       type="button" 
                       onClick={() => handleRemoveMedication(idx)}
