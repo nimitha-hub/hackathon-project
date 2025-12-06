@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './app.css';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 // ==================== LOGIN PAGE ====================
 
 function LoginPage({ onLogin }) {
@@ -17,13 +19,13 @@ function LoginPage({ onLogin }) {
     try {
       let response;
       if (isRegister) {
-        response = await fetch('http://localhost:5000/api/auth/register', {
+        response = await fetch(`${API_URL}/api/auth/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password, name })
         });
       } else {
-        response = await fetch('http://localhost:5000/api/auth/login', {
+        response = await fetch(`${API_URL}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })
@@ -150,7 +152,7 @@ function ProfileSetupPage({ token, onComplete }) {
     setSaving(true);
     
     try {
-      const response = await fetch('http://localhost:5000/api/user/profile', {
+      const response = await fetch(`${API_URL}/api/user/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -346,7 +348,7 @@ function ChatPage({ token }) {
 
   const loadChatHistory = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/chat/history', {
+      const response = await fetch(`${API_URL}/api/chat/history`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
@@ -364,7 +366,7 @@ function ChatPage({ token }) {
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/chat', {
+      const response = await fetch(`${API_URL}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -434,7 +436,7 @@ function EmailPage({ token }) {
     setSending(true);
     setMessage('');
     try {
-      const response = await fetch('http://localhost:5000/api/send-email', {
+      const response = await fetch(`${API_URL}/api/send-email`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -508,7 +510,7 @@ function MainDashboard({ token, onLogout }) {
 
   const fetchProfile = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/user/profile', {
+      const response = await fetch(`${API_URL}/api/user/profile`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (response.ok) {
