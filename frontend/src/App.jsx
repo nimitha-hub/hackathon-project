@@ -1008,14 +1008,46 @@ function MainDashboard({ token, onLogout }) {
 // ==================== MAIN APP ====================
 
 export default function App() {
-  // Debug logging for localStorage state
-  console.log('App mount:', {
-    token: localStorage.getItem('token'),
-    profileSetup: localStorage.getItem('profileSetup')
-  });
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('token'));
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [profileSetup, setProfileSetup] = useState(localStorage.getItem('profileSetup') === 'true');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [token, setToken] = useState(null);
+  const [profileSetup, setProfileSetup] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Validate token on mount
+  useEffect(() => {
+    const storedToken = localStorage.getItem('token');
+    console.log('App mount - checking token:', !!storedToken);
+    
+    if (storedToken) {
+      // Verify token is valid
+      fetch(`${API_URL}/api/user/profile`, {
+        headers: { 'Authorization': `Bearer ${storedToken}` }
+      })
+      .then(response => {
+        if (response.ok) {
+          console.log('Token valid');
+          setToken(storedToken);
+          setIsLoggedIn(true);
+          setProfileSetup(localStorage.getItem('profileSetup') === 'true');
+        } else {
+          console.log('Token invalid, clearing');
+          localStorage.clear();
+        }
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('Token check failed:', err);
+        localStorage.clear();
+        setLoading(false);
+      });
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  if (loading) {
+    return <div className="loading">Loading...</div>;
+  }
 
   const handleLogin = () => {
     const newToken = localStorage.getItem('token');
