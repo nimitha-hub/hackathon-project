@@ -1149,8 +1149,10 @@ def init_schedulers():
             schedule_weekly_reports()
             app.schedulers_initialized = True
 
+# Initialize database tables (works with both Flask dev server and gunicorn)
+with app.app_context():
+    db.create_all()
+    print("Database tables initialized")
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
     app.run(debug=True, port=5000)
