@@ -504,6 +504,7 @@ function MainDashboard({ token, onLogout }) {
   const [profile, setProfile] = useState(null);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [schedule, setSchedule] = useState([]);
+  const [loadingError, setLoadingError] = useState(null);
 
   useEffect(() => {
     fetchProfile();
@@ -519,15 +520,25 @@ function MainDashboard({ token, onLogout }) {
 
   const fetchProfile = async () => {
     try {
+      console.log('Fetching profile from:', `${API_URL}/api/user/profile`);
       const response = await fetch(`${API_URL}/api/user/profile`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
+      console.log('Profile response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('Profile data:', data);
         setProfile(data);
+        setLoadingError(null);
+      } else {
+        const errorData = await response.json();
+        console.error('Profile fetch failed:', errorData);
+        setLoadingError(`Failed to load profile: ${errorData.error || response.statusText}`);
       }
     } catch (err) {
       console.error('Failed to fetch profile:', err);
+      setLoadingError(`Network error: ${err.message}. Make sure backend is running on ${API_URL}`);
     }
   };
 
@@ -616,8 +627,27 @@ function MainDashboard({ token, onLogout }) {
     });
   };
 
+  if (loadingError) {
+    return (
+      <div className="loading-error">
+        <h2>Error Loading Profile</h2>
+        <p>{loadingError}</p>
+        <button onClick={fetchProfile} className="btn-primary">Retry</button>
+        <button onClick={onLogout} className="btn-secondary" style={{ marginLeft: '10px' }}>Logout</button>
+      </div>
+    );
+  }
+
   if (!profile) {
-    return <div className="loading">Loading...</div>;
+    return (
+      <div className="loading">
+        <div className="spinner"></div>
+        <p>Loading your health profile...</p>
+        <p style={{ fontSize: '0.9em', color: '#666', marginTop: '10px' }}>
+          Connecting to {API_URL}
+        </p>
+      </div>
+    );
   }
 
   return (
