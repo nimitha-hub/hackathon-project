@@ -3,8 +3,8 @@ services:
     name: healmate-backend
     env: python
     region: oregon
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app
+    buildCommand: cd backend && pip install -r requirements.txt
+    startCommand: cd backend && gunicorn --bind 0.0.0.0:$PORT app:app
     envVars:
       - key: FLASK_ENV
         value: production
