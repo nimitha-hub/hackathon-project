@@ -526,19 +526,37 @@ function MainDashboard({ token, onLogout }) {
   }, [token]);
 
   const requestNotificationPermission = async () => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      const permission = await Notification.requestPermission();
-      console.log('Notification permission:', permission);
+    if ('Notification' in window) {
+      console.log('Current notification permission:', Notification.permission);
+      if (Notification.permission === 'default') {
+        const permission = await Notification.requestPermission();
+        console.log('Notification permission granted:', permission);
+        if (permission === 'granted') {
+          // Show test notification
+          showNotification('🎉 Notifications Enabled!', 'You will receive health reminders every 30 minutes.');
+        }
+      } else if (Notification.permission === 'granted') {
+        // Show test notification on dashboard load
+        showNotification('👋 Welcome to HealMate!', 'Your health companion is ready to assist you.');
+      }
+    } else {
+      console.error('This browser does not support notifications');
     }
   };
 
   const showNotification = (title, body) => {
     if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, {
+      console.log('Showing notification:', title);
+      const notification = new Notification(title, {
         body: body,
         icon: '/favicon.ico',
-        badge: '/favicon.ico'
+        badge: '/favicon.ico',
+        requireInteraction: false
       });
+      // Auto-close after 5 seconds
+      setTimeout(() => notification.close(), 5000);
+    } else {
+      console.log('Cannot show notification. Permission:', Notification.permission);
     }
   };
 
@@ -576,66 +594,88 @@ function MainDashboard({ token, onLogout }) {
     if (!profile) return;
 
     const scheduleItems = [];
-    const wakeTime = 6; // 6 AM
     const sleepHours = parseInt(profile.sleep_goal_hours) || 8;
-    const sleepTime = 24 - (24 - sleepHours); // Calculate sleep time based on 6 AM wake
+    const wakeTime = 7; // 7 AM wake time
+    const bedTime = wakeTime + 24 - sleepHours; // Calculate bedtime (e.g., 7AM + 24 - 8 = 23:00 or 11 PM)
+    
+    // Morning routine
+    scheduleItems.push({
+      time: `${wakeTime}:00`,
+      activity: '☀️ Wake Up Time',
+      type: 'wake'
+    });
 
-    // Water reminders (every hour from wake to sleep - 1 hour)
-    for (let h = wakeTime; h < wakeTime + sleepHours - 1; h++) {
-      const hour = h % 24;
-      scheduleItems.push({
-        time: `${hour}:00`,
-        activity: 'Drink Water',
-        type: 'water'
+    // Breakfast
+    scheduleItems.push({
+      time: `${wakeTime + 1}:00`,
+      activity: '🍳 Breakfast',
+      type: 'food'
+    });
+
+    // Morning medications
+    if (profile.medications && profile.medications.length > 0) {
+      profile.medications.forEach((med, index) => {
+        scheduleItems.push({
+          time: '08:00',
+          activity: `💊 ${med.name} (${med.dose})`,
+          type: 'medication'
+        });
       });
     }
 
-    // Breakfast (1 hour before work)
-    const [wsHour] = (profile.work_start_time || '09:00').split(':').map(Number);
-    const breakfastHour = Math.max(wsHour - 1, 0);
-    scheduleItems.push({
-      time: `${breakfastHour}:00`,
-      activity: 'Breakfast',
-      type: 'food'
+    // Water reminders throughout the day
+    const waterTimes = ['10:00', '14:00', '16:00', '18:00'];
+    waterTimes.forEach(time => {
+      scheduleItems.push({
+        time: time,
+        activity: '💧 Drink Water (1 glass)',
+        type: 'water'
+      });
     });
 
     // Lunch
     scheduleItems.push({
       time: '12:30',
-      activity: 'Lunch',
+      activity: '🍽️ Lunch',
       type: 'food'
     });
 
-    // Dinner (2 hours before bed)
-    const bedTime = (wakeTime + sleepHours) % 24;
-    const dinnerHour = bedTime - 2;
+    // Afternoon break
     scheduleItems.push({
-      time: `${Math.max(dinnerHour, 0)}:00`,
-      activity: 'Dinner',
-      type: 'food'
+      time: '15:00',
+      activity: '🧘 Take a Short Break',
+      type: 'break'
     });
 
-    // Sleep suggestion
-    scheduleItems.push({
-      time: `${bedTime}:00`,
-      activity: 'Sleep Time',
-      type: 'sleep'
-    });
-
-    // Add medications
+    // Evening medications
     if (profile.medications && profile.medications.length > 0) {
       scheduleItems.push({
-        time: '08:00',
-        activity: `Take Medication: ${profile.medications[0].name}`,
+        time: '20:00',
+        activity: `💊 Evening Medications`,
         type: 'medication'
       });
     }
 
+    // Dinner
+    const dinnerTime = Math.min(bedTime - 2, 20); // 2 hours before bed or 8 PM
+    scheduleItems.push({
+      time: `${dinnerTime}:00`,
+      activity: '🍽️ Dinner',
+      type: 'food'
+    });
+
+    // Sleep time
+    scheduleItems.push({
+      time: `${bedTime % 24}:00`,
+      activity: '😴 Sleep Time',
+      type: 'sleep'
+    });
+
     // Sort by time
     scheduleItems.sort((a, b) => {
-      const [aHour] = a.time.split(':').map(Number);
-      const [bHour] = b.time.split(':').map(Number);
-      return aHour - bHour;
+      const [aHour, aMin] = a.time.split(':').map(Number);
+      const [bHour, bMin] = b.time.split(':').map(Number);
+      return (aHour * 60 + aMin) - (bHour * 60 + bMin);
     });
 
     setSchedule(scheduleItems);
