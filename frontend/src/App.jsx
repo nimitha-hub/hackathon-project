@@ -129,9 +129,9 @@ function ProfileSetupPage({ token, onComplete }) {
   });
   const [newMed, setNewMed] = useState({
     name: '',
-    dose: '',
+    dosage: '',
     frequency: '',
-    stock: ''
+    stock_quantity: ''
   });
   const [saving, setSaving] = useState(false);
 
@@ -141,12 +141,12 @@ function ProfileSetupPage({ token, onComplete }) {
   };
 
   const handleAddMedication = () => {
-    if (newMed.name && newMed.dose && newMed.frequency && newMed.stock) {
+    if (newMed.name && newMed.dosage && newMed.frequency && newMed.stock_quantity) {
       setProfile(prev => ({
         ...prev,
         medications: [...prev.medications, newMed]
       }));
-      setNewMed({ name: '', dose: '', frequency: '', stock: '' });
+      setNewMed({ name: '', dosage: '', frequency: '', stock_quantity: '' });
     }
   };
 
@@ -296,9 +296,9 @@ function ProfileSetupPage({ token, onComplete }) {
               />
               <input
                 type="text"
-                placeholder="Dose (e.g., 500mg)"
-                value={newMed.dose}
-                onChange={(e) => setNewMed({...newMed, dose: e.target.value})}
+                placeholder="Dosage (e.g., 500mg)"
+                value={newMed.dosage}
+                onChange={(e) => setNewMed({...newMed, dosage: e.target.value})}
               />
               <input
                 type="text"
@@ -308,9 +308,9 @@ function ProfileSetupPage({ token, onComplete }) {
               />
               <input
                 type="number"
-                placeholder="Stock Qty"
-                value={newMed.stock}
-                onChange={(e) => setNewMed({...newMed, stock: e.target.value})}
+                placeholder="Stock Quantity"
+                value={newMed.stock_quantity}
+                onChange={(e) => setNewMed({...newMed, stock_quantity: e.target.value})}
               />
               <button type="button" className="btn-add-med" onClick={handleAddMedication}>
                 + Add
