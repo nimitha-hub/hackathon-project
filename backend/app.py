@@ -6,7 +6,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
+# import google.generativeai as genai  # Disabled - Python 3.14 compatibility issue
 from apscheduler.schedulers.background import BackgroundScheduler
 import smtplib
 from email.mime.text import MIMEText
@@ -25,9 +25,9 @@ jwt = JWTManager(app)
 CORS(app)
 
 # Initialize Google Generative AI
-GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')
-if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
+# GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY', '')
+# if GOOGLE_API_KEY:
+#     genai.configure(api_key=GOOGLE_API_KEY)
 
 # Email Configuration
 SMTP_SERVER = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
